@@ -1,0 +1,47 @@
+{
+  "name": "picgo-plugin-github-plus",
+  "version": "1.1.0",
+  "description": "picgo uploader for github",
+  "gui": true,
+  "main": "dist/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zWingz/picgo-plugin-github-plus"
+  },
+  "homepage": "https://github.com/zWingz/picgo-plugin-github-plus",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "tsc -w -p .",
+    "clean": "rm -rf dist",
+    "pub": "yarn clean && yarn build && release-it"
+  },
+  "keywords": [
+    "picgo",
+    "picgo-plugin",
+    "picgo-gui-plugin"
+  ],
+  "author": "zhengzwing@gmail.com",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^10.10.1",
+    "electron": "^4.0.1",
+    "nodemon": "^1.18.9",
+    "picgo": "^1.2.1",
+    "release-it": "^9.8.1",
+    "tslint": "^5.10.0",
+    "tslint-config-standard": "^7.1.0",
+    "typescript": "^3.0.3"
+  },
+  "dependencies": {
+    "@octokit/rest": "^16.8.1",
+    "dayjs": "^1.8.0",
+    "url-join": "^4.0.0"
+  }
+}
