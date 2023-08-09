@@ -1,0 +1,61 @@
+#绘制ROC曲线
+source("D:\\Personal\\Documents\\R语言函数\\ROC函数.R")
+genesnames <- c(rownames(pre_machine_data1))
+ydx_draw_roc_curve(genesnames,pre_machine_data1, picDir = "ROC", color = "red")
+
+获取GEO的表达矩阵
+source("D:\\Personal\\Documents\\R语言函数\\GEO芯片分析函数.R")
+result <- getGEO_data("GSE63060", "GPL6947.annot.gz", "Gene symbol")
+GSE30208_pData <- result$pData
+GSE30208_exp <- result$exp
+
+# 删除离群的样本
+# 删除离群值
+outliers <- rownames(GSE30208_targets)[grep("AD", GSE30208_targets[,"status:ch1"])]
+# 删除离群值，根据上面PCA的结果进行删除，如果没有离群值，可不删除
+
+data <- del_data(GSE30208_targets, GSE30208_exp, outliers, log_transform = TRUE)
+#获取删除后的数据进行读取
+GSE30208_targets <- data$targets
+GSE30208_exp <- data$expr
+
+# GO分析的函数，把基因给与gene，后面就可以直接使用
+source("D:\\Personal\\Documents\\R语言函数\\GO分析函数.R")
+gene = rownames(pre_machine_data[4:50,])
+ydx_draw_GO(gene)
+
+
+
+source("D:\\Personal\\Documents\\R语言函数\\GO分析函数.R")
+gene = rownames(pre_machine_data[4:50,])
+机器学习：   要么给出表达矩阵加target文件，使用下面的函数进行预处理，给样本名称后面加上con或treat
+pre_machine_data <- ydx_draw_pre_machine_learning(GSE30208_exp,GSE30208_targets)
+要么在加了con或treat的表达矩阵后面，直接使用机器学习
+# 机器学习---lasso数据
+lasso <- ydx_draw_lasso(pre_machine_data1)
+# 机器学习---随机森林
+randomForest <- ydx_draw_randomForest(pre_machine_data1)
+#机器学习---GBM
+GBM<- ydx_draw_GBM(pre_machine_data1)
+#机器学习---XGboost
+XGboost<- ydx_draw_XGboost(pre_machine_data1,importantvlue=2)
+#机器学习---SVM
+SVM<- ydx_draw_SVM_RFE(pre_machine_data1)
+#机器学习---决策树
+Decision_Tree<- ydx_draw_Decision_Tree(pre_machine_data1)
+
+
+
+
+
+
+# VEEN分析的绘图
+source("D:\\Personal\\Documents\\R语言函数\\veen函数.R")
+  data_list = list(
+    'Gradient Boosting Machine' = GBM$GBMGenes,
+    'randomForest' = randomForest$genename,
+    'Decision Tree' = Decision_Tree$JCSGenes,
+    'Lasso' = lasso$lassoGene,
+    'Xgboost' = XGboost$XGBGenes
+  )
+ ydx_draw_veen_plot(data_list)
