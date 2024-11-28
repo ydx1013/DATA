@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PubMed 页面显示期刊影响因子
 // @namespace    http://tampermonkey.net/
-// @version      0.51
+// @version      0.6.1
 // @description  在 PubMed 和 PMC 页面显示期刊影响因子
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
@@ -57,7 +57,7 @@
 
     // 添加缓存系统
     const CACHE_KEY = 'journal_cache';
-    const CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7天过期时间(毫秒)
+    const CACHE_EXPIRY = 90 * 24 * 60 * 60 * 1000; // 7天过期时间(毫秒)
     const journalCache = new Map(loadCacheFromStorage());
     const requestQueue = [];
     let isProcessing = false;
