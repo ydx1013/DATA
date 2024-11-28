@@ -59,7 +59,7 @@
     const journalCache = new Map();
     const requestQueue = [];
     let isProcessing = false;
-    const RATE_LIMIT = 500; // 每次请求间隔500毫秒
+    const RATE_LIMIT = 100; // 每次请求间隔500毫秒
 
 
     // 处理请求队列
