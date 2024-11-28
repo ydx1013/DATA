@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PubMed 页面显示期刊影响因子
 // @namespace    http://tampermonkey.net/
-// @version      0.3
+// @version      0.4
 // @description  在 PubMed 和 PMC 页面显示期刊影响因子
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
