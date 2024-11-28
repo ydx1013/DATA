@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PubMed 页面显示期刊影响因子
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.6.2
 // @description  在 PubMed 和 PMC 页面显示期刊影响因子
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
@@ -13,6 +13,7 @@
 
 (function() {
     'use strict';
+    console.log('油猴脚本已加载');
 
     // 预定义颜色池
     const colorSchemes = [
@@ -57,7 +58,7 @@
 
     // 添加缓存系统
     const CACHE_KEY = 'journal_cache';
-    const CACHE_EXPIRY = 90 * 24 * 60 * 60 * 1000; // 7天过期时间(毫秒)
+    const CACHE_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30天过期时间(毫秒)
     const journalCache = new Map(loadCacheFromStorage());
     const requestQueue = [];
     let isProcessing = false;
@@ -115,6 +116,7 @@
             try {
                 // 再次检查缓存(以防在队列中等待期间其他请求已经获取了数据)
                 if (journalCache.has(journalName)) {
+                    console.log('队列处理时从缓存获取:', journalName);
                     resolve(journalCache.get(journalName));
                     continue; // 跳过延迟直接处理下一个
                 }
@@ -124,6 +126,7 @@
                 // 只有实际发起API请求时才添加延迟
                 await new Promise(resolve => setTimeout(resolve, RATE_LIMIT));
             } catch (error) {
+                console.error('处理队列项失败:', error);
                 reject(error);
             }
         }
@@ -131,36 +134,46 @@
     }
 
     // 执行实际的API请求
-async function executeRequest(journalName) {
-    try {
-        // 移除URL末尾的斜杠
-        const url = 'https://journal-api.yueyang.eu.org';  // 修改这里
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                journal: journalName
-            })
-        });
+    async function executeRequest(journalName) {
+        try {
+            console.log('发起API请求:', journalName);
+            const url = 'https://journal-api.yueyang.eu.org';
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    journal: journalName
+                })
+            });
 
-        const data = await response.json();
+            if (!response.ok) {
+                throw new Error(`API请求失败: ${response.status}`);
+            }
 
-        if (data.code === 200 && data.data && data.data.officialRank && data.data.officialRank.all) {
-            return processJournalData(data.data.officialRank.all);
+            const data = await response.json();
+
+            if (data.code === 200 && data.data && data.data.officialRank && data.data.officialRank.all) {
+                const processedData = processJournalData(data.data.officialRank.all);
+                if (processedData) {
+                    console.log('成功获取数据:', journalName);
+                    return processedData;
+                }
+            }
+            console.log('无有效数据:', journalName);
+            return null;
+        } catch (error) {
+            console.error('API请求失败:', journalName, error);
+            return null;
         }
-        return null;
-    } catch (error) {
-        console.error('获取期刊数据失败:', error);
-        return null;
     }
-}
 
     // 获取期刊数据
     async function getJournalData(journalName) {
-        // 检查内存缓存
+        // 首先检查缓存
         if (journalCache.has(journalName)) {
+            console.log('从缓存获取数据:', journalName);
             return journalCache.get(journalName);
         }
 
@@ -169,8 +182,10 @@ async function executeRequest(journalName) {
                 journalName,
                 resolve: (data) => {
                     if (data) {
+                        // 保存到缓存
                         journalCache.set(journalName, data);
                         saveCacheToStorage(journalCache);
+                        console.log('数据已缓存:', journalName);
                     }
                     resolve(data);
                 },
@@ -193,7 +208,6 @@ async function executeRequest(journalName) {
 
     // 更新搜索页面的指标显示
     function updateSearchMetricsDisplay(container, journalData) {
-        // 添加搜索页面的样式
         const style = document.createElement('style');
         style.textContent = `
             .journal-metrics {
@@ -207,15 +221,13 @@ async function executeRequest(journalName) {
                 padding: 2px 6px;
                 border-radius: 12px;
                 font-size: 12px;
-                font-weight: 600;  // 添加这行来设置字体加粗
-
+                font-weight: 600;
                 width: fit-content;
                 display: flex;
                 align-items: center;
             }
         `;
 
-        // 为每个指标添加样式
         Object.keys(desiredMetrics).forEach((metric, index) => {
             const className = getMetricClassName(metric);
             const colorScheme = colorSchemes[index % colorSchemes.length];
@@ -228,7 +240,10 @@ async function executeRequest(journalName) {
             `;
         });
 
-        document.head.appendChild(style);
+        if (!document.head.querySelector('style[data-metrics-style]')) {
+            style.setAttribute('data-metrics-style', 'true');
+            document.head.appendChild(style);
+        }
 
         const metricsContainer = document.createElement('div');
         metricsContainer.className = 'journal-metrics';
@@ -246,7 +261,6 @@ async function executeRequest(journalName) {
 
     // 更新详情页面的指标显示
     function updateDetailMetricsDisplay(container, journalData) {
-        // 添加详情页面的样式
         const style = document.createElement('style');
         style.textContent = `
             .journal-metrics {
@@ -266,7 +280,6 @@ async function executeRequest(journalName) {
             }
         `;
 
-        // 为每个指标添加样式
         Object.keys(desiredMetrics).forEach((metric, index) => {
             const className = getMetricClassName(metric);
             const colorScheme = colorSchemes[index % colorSchemes.length];
@@ -279,7 +292,10 @@ async function executeRequest(journalName) {
             `;
         });
 
-        document.head.appendChild(style);
+        if (!document.head.querySelector('style[data-metrics-style]')) {
+            style.setAttribute('data-metrics-style', 'true');
+            document.head.appendChild(style);
+        }
 
         const metricsContainer = document.createElement('div');
         metricsContainer.className = 'journal-metrics';
@@ -297,7 +313,9 @@ async function executeRequest(journalName) {
 
     // 修改搜索页面的显示逻辑
     async function addImpactFactorsToSearch() {
+        console.log('执行搜索页面处理');
         const articles = document.querySelectorAll('.docsum-content');
+        console.log('找到文章数量:', articles.length);
 
         for (const article of articles) {
             const citationSpan = article.querySelector('.docsum-journal-citation');
@@ -311,10 +329,10 @@ async function executeRequest(journalName) {
 
             if (match && match[1]) {
                 const journalName = removeChineseCharacters(match[1]);
+                console.log('处理期刊:', journalName);
                 citationSpan.dataset.processing = 'true';
 
                 try {
-                    // 如果有缓存,立即显示
                     if (journalCache.has(journalName)) {
                         const journalData = journalCache.get(journalName);
                         if (journalData) {
@@ -324,7 +342,6 @@ async function executeRequest(journalName) {
                         continue;
                     }
 
-                    // 没有缓存才加入请求队列
                     const journalData = await getJournalData(journalName);
                     if (journalData) {
                         updateSearchMetricsDisplay(citationSpan, journalData);
@@ -340,6 +357,7 @@ async function executeRequest(journalName) {
 
     // 修改详情页面的显示逻辑
     async function addImpactFactorsToDetail() {
+        console.log('执行详情页面处理');
         const journalElement = document.getElementById('full-view-journal-trigger');
         const existingMetrics = document.querySelector('.journal-metrics');
 
@@ -348,6 +366,7 @@ async function executeRequest(journalName) {
             journalElement.dataset.processing === 'true') return;
 
         const journalName = removeChineseCharacters(journalElement.textContent);
+        console.log('处理期刊:', journalName);
         journalElement.dataset.processing = 'true';
 
         try {
@@ -367,6 +386,7 @@ async function executeRequest(journalName) {
 
     // 添加PMC页面的期刊信息处理
     async function addImpactFactorsToPMC() {
+        console.log('执行PMC页面处理');
         const journalElement = document.querySelector('main article section:first-child div button');
         const titleContainer = document.querySelector('main article section:nth-child(2) div hgroup');
 
@@ -374,13 +394,12 @@ async function executeRequest(journalName) {
             return;
         }
 
-
         const journalName = removeChineseCharacters(journalElement.textContent);
+        console.log('处理期刊:', journalName);
 
         try {
             const journalData = await getJournalData(journalName);
             if (journalData) {
-                // 添加PMC页面的样式
                 const style = document.createElement('style');
                 style.textContent = `
                     .journal-metrics {
@@ -400,7 +419,6 @@ async function executeRequest(journalName) {
                     }
                 `;
 
-                // 为每个指标添加样式
                 Object.keys(desiredMetrics).forEach((metric, index) => {
                     const className = getMetricClassName(metric);
                     const colorScheme = colorSchemes[index % colorSchemes.length];
@@ -413,7 +431,10 @@ async function executeRequest(journalName) {
                     `;
                 });
 
-                document.head.appendChild(style);
+                if (!document.head.querySelector('style[data-metrics-style]')) {
+                    style.setAttribute('data-metrics-style', 'true');
+                    document.head.appendChild(style);
+                }
 
                 const metricsContainer = document.createElement('div');
                 metricsContainer.className = 'journal-metrics';
@@ -435,8 +456,10 @@ async function executeRequest(journalName) {
 
     // 主函数
     async function init() {
+        console.log('init 函数开始执行');
         const isPMC = window.location.hostname.includes('pmc.ncbi.nlm.nih.gov');
         const isPubMedDetail = window.location.pathname.match(/\/\d+\//);
+        console.log('页面类型:', { isPMC, isPubMedDetail, location: window.location.href });
 
         if (isPMC) {
             await addImpactFactorsToPMC();
@@ -448,30 +471,37 @@ async function executeRequest(journalName) {
     }
 
     // 在页面加载完成后执行
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOMContentLoaded 触发');
+        init();
+    });
+
+    window.addEventListener('load', () => {
+        console.log('Window load 触发');
+        init();
+    });
 
     // 创建观察器处理动态加载的内容
     const observer = new MutationObserver((mutations) => {
-        const isPMC = window.location.hostname.includes('pmc.ncbi.nlm.nih.gov');
-        if (isPMC) {
-            const titleContainer = document.querySelector('main article section:nth-child(2) div hgroup');
-            if (titleContainer && !titleContainer.querySelector('.journal-metrics')) {
-                setTimeout(init, 100);
-            }
-        } else {
-            setTimeout(init, 100);
-        }
+        console.log('检测到页面变化');
+        setTimeout(init, 500);
     });
 
-    // 观察页面变化
-    const target = document.querySelector('.search-results-chunk') ||
-                  document.querySelector('main') ||
-                  document.body;
+    // 确保 observer 正确设置
+    setTimeout(() => {
+        const target = document.querySelector('.search-results-chunk') ||
+                      document.querySelector('main') ||
+                      document.body;
 
-    if (target) {
-        observer.observe(target, {
-            childList: true,
-            subtree: true
-        });
-    }
+        if (target) {
+            console.log('开始观察DOM变化');
+            observer.observe(target, {
+                childList: true,
+                subtree: true,
+                attributes: true
+            });
+        } else {
+            console.log('未找到观察目标');
+        }
+    }, 1000);
 })();
