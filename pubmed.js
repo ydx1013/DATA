@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PubMed 页面显示期刊影响因子
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  在 PubMed 和 PMC 页面显示期刊影响因子
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
@@ -16,25 +16,24 @@
 
     // 预定义颜色池
     const colorSchemes = [
-        { bg: '#fce4ec', border: '#fce4ec', text: '#c2185b' },  // 粉红
         { bg: '#e3f2fd', border: '#e3f2fd', text: '#1565C0' },  // 蓝色
         { bg: '#e0f7fa', border: '#e0f7fa', text: '#00838F' },  // 青色
         { bg: '#e8f5e9', border: '#e8f5e9', text: '#2E7D32' },  // 绿色
         { bg: '#f3e5f5', border: '#f3e5f5', text: '#6A1B9A' },  // 紫色
         { bg: '#fff3e0', border: '#fff3e0', text: '#E65100' },  // 橙色
         { bg: '#e8eaf6', border: '#e8eaf6', text: '#283593' },  // 靛蓝
+        { bg: '#fce4ec', border: '#fce4ec', text: '#c2185b' },  // 粉红
         { bg: '#f1f8e9', border: '#f1f8e9', text: '#558b2f' }   // 浅绿
     ];
 
     // 定义需要显示的指标
     const desiredMetrics = {
-        '中科院预警': 'sciwarn',
         '中科院Top分区': 'sciUpTop',
+        'JCR分区': 'sci',
+        '5年影响因子': 'sciif5',
         '中科院基础版': 'sciBase',
         '中科院升级版': 'sciUp',
         '影响因子': 'sciif',
-        'JCR分区': 'sci',
-        '5年影响因子': 'sciif5',
         'JCI指数': 'jci',
         'ESI学科分类': 'esi'
     };
@@ -57,11 +56,54 @@
     }
 
     // 添加缓存系统
-    const journalCache = new Map();
+    const CACHE_KEY = 'journal_cache';
+    const CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7天过期时间(毫秒)
+    const journalCache = new Map(loadCacheFromStorage());
     const requestQueue = [];
     let isProcessing = false;
-    const RATE_LIMIT = 100; // 每次请求间隔500毫秒
+    const RATE_LIMIT = 500; // 每次请求间隔500毫秒
 
+    // 从localStorage加载缓存
+    function loadCacheFromStorage() {
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (!cached) return [];
+            
+            const parsedCache = JSON.parse(cached);
+            const now = Date.now();
+            
+            // 过滤掉过期的数据
+            const validEntries = Object.entries(parsedCache)
+                .filter(([_, value]) => now - value.timestamp < CACHE_EXPIRY)
+                .map(([key, value]) => [key, value.data]);
+                
+            // 清理过期数据
+            if (validEntries.length !== Object.keys(parsedCache).length) {
+                saveCacheToStorage(new Map(validEntries));
+            }
+            
+            return validEntries;
+        } catch (error) {
+            console.error('加载缓存失败:', error);
+            return [];
+        }
+    }
+
+    // 保存缓存到localStorage
+    function saveCacheToStorage(cache) {
+        try {
+            const cacheObject = {};
+            cache.forEach((value, key) => {
+                cacheObject[key] = {
+                    data: value,
+                    timestamp: Date.now()
+                };
+            });
+            localStorage.setItem(CACHE_KEY, JSON.stringify(cacheObject));
+        } catch (error) {
+            console.error('保存缓存失败:', error);
+        }
+    }
 
     // 处理请求队列
     async function processQueue() {
@@ -110,7 +152,7 @@ async function executeRequest(journalName) {
 
     // 获取期刊数据
     async function getJournalData(journalName) {
-        // 检查缓存
+        // 检查内存缓存
         if (journalCache.has(journalName)) {
             return journalCache.get(journalName);
         }
@@ -121,6 +163,7 @@ async function executeRequest(journalName) {
                 resolve: (data) => {
                     if (data) {
                         journalCache.set(journalName, data);
+                        saveCacheToStorage(journalCache);
                     }
                     resolve(data);
                 },
