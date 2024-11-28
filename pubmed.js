@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PubMed 页面显示期刊影响因子
 // @namespace    http://tampermonkey.net/
-// @version      0.5
+// @version      0.51
 // @description  在 PubMed 和 PMC 页面显示期刊影响因子
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
@@ -68,20 +68,20 @@
         try {
             const cached = localStorage.getItem(CACHE_KEY);
             if (!cached) return [];
-            
+
             const parsedCache = JSON.parse(cached);
             const now = Date.now();
-            
+
             // 过滤掉过期的数据
             const validEntries = Object.entries(parsedCache)
                 .filter(([_, value]) => now - value.timestamp < CACHE_EXPIRY)
                 .map(([key, value]) => [key, value.data]);
-                
+
             // 清理过期数据
             if (validEntries.length !== Object.keys(parsedCache).length) {
                 saveCacheToStorage(new Map(validEntries));
             }
-            
+
             return validEntries;
         } catch (error) {
             console.error('加载缓存失败:', error);
@@ -113,12 +113,19 @@
         while (requestQueue.length > 0) {
             const { journalName, resolve, reject } = requestQueue.shift();
             try {
+                // 再次检查缓存(以防在队列中等待期间其他请求已经获取了数据)
+                if (journalCache.has(journalName)) {
+                    resolve(journalCache.get(journalName));
+                    continue; // 跳过延迟直接处理下一个
+                }
+
                 const result = await executeRequest(journalName);
                 resolve(result);
+                // 只有实际发起API请求时才添加延迟
+                await new Promise(resolve => setTimeout(resolve, RATE_LIMIT));
             } catch (error) {
                 reject(error);
             }
-            await new Promise(resolve => setTimeout(resolve, RATE_LIMIT));
         }
         isProcessing = false;
     }
@@ -291,7 +298,6 @@ async function executeRequest(journalName) {
     // 修改搜索页面的显示逻辑
     async function addImpactFactorsToSearch() {
         const articles = document.querySelectorAll('.docsum-content');
-        const promises = [];
 
         for (const article of articles) {
             const citationSpan = article.querySelector('.docsum-journal-citation');
@@ -307,21 +313,29 @@ async function executeRequest(journalName) {
                 const journalName = removeChineseCharacters(match[1]);
                 citationSpan.dataset.processing = 'true';
 
-                promises.push(
-                    getJournalData(journalName).then(journalData => {
+                try {
+                    // 如果有缓存,立即显示
+                    if (journalCache.has(journalName)) {
+                        const journalData = journalCache.get(journalName);
                         if (journalData) {
                             updateSearchMetricsDisplay(citationSpan, journalData);
                         }
-                    }).catch(error => {
-                        console.error('处理期刊数据失败:', error);
-                    }).finally(() => {
                         delete citationSpan.dataset.processing;
-                    })
-                );
+                        continue;
+                    }
+
+                    // 没有缓存才加入请求队列
+                    const journalData = await getJournalData(journalName);
+                    if (journalData) {
+                        updateSearchMetricsDisplay(citationSpan, journalData);
+                    }
+                } catch (error) {
+                    console.error('处理期刊数据失败:', error);
+                } finally {
+                    delete citationSpan.dataset.processing;
+                }
             }
         }
-
-        await Promise.all(promises);
     }
 
     // 修改详情页面的显示逻辑
