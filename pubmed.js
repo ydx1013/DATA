@@ -6,6 +6,8 @@
 // @author       Your name
 // @match        https://pubmed.ncbi.nlm.nih.gov/*
 // @match        https://pmc.ncbi.nlm.nih.gov/articles/*
+// @updateURL    https://raw.githubusercontent.com/ydx1013/DATA/refs/heads/master/pubmed.js
+// @downloadURL  https://raw.githubusercontent.com/ydx1013/DATA/refs/heads/master/pubmed.js
 // @grant        none
 // ==/UserScript==
 
